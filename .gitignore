@@ -1,0 +1,26 @@
+# autoconf
+.deps/
+.libs/
+a.out.dSYM/
+autom4te.cache/
+config.h
+config.log
+config.status
+libtool
+Makefile
+stamp-*
+vendor/libmicrohttpd/MHD_config.h
+*~
+
+# build output
+*.pc
+*.o
+*.lo
+*.la
+src/mysql_slowlogd
+vendor/libmicrohttpd/src/examples/*_example
+vendor/libmicrohttpd/src/examples/fileserver_example_dirs
+vendor/libmicrohttpd/src/examples/fileserver_example_external_select
+vendor/libmicrohttpd/src/examples/minimal_example_comet
+vendor/libmicrohttpd/src/testcurl/daemon_options_test
+vendor/libmicrohttpd/src/testcurl/libcurl_version_check.a
