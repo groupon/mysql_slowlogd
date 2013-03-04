@@ -43,7 +43,7 @@ high-availability with manual or automated failover. One issue with
 such architectures is that, after failover, the former slave's buffer
 pool [may be cold] [2] and the server [becomes IO bound] [3].
 
-![Playback Architecture](mysql_slowlogd/raw/master/doc/playback_architecture.png)
+![Playback Architecture](https://raw.github.com/groupon/mysql_slowlogd/master/doc/playback_architecture.png)
 
 mysql_slowlogd can be used as part of a solution to keep the buffer
 pool of the standby database warm. It serves the MySQL slow log via
