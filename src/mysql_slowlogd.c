@@ -70,46 +70,11 @@ struct tailed_file {
     struct StreamBMH *bmh_context; /* Boyer-Moore-Horspool string search context */
     struct StreamBMH_Occ bmh_occ;  /* Boyer-Moore-Horspool occurrance table */
     enum {
+        TAILED_FILE_STATE_START,   /* just started, move to DUMP state next */
         TAILED_FILE_STATE_WAIT,    /* reached eof; wait for more data */
         TAILED_FILE_STATE_DUMP     /* still have bytes to send */
     } state;
 };
-
-static off_t seek_last_query(struct tailed_file *tf) {
-    char buf[8192];
-    off_t last = tf->st.st_size;
-    off_t start = last - sizeof(buf);
-    ssize_t count;
-    const char *target = "# User@Host";
-    int target_count = strlen(target);
-    int matched = 0;
-    int i;
-
-    do {
-        if (start < 0)
-            start = 0;        
-        start = lseek(tf->fd, start, SEEK_SET);
-        if (start < 0)
-            return -1;
-
-        count = read(tf->fd, buf, sizeof(buf));
-        if (count < 0)
-            return -1;
-        else if (count == 0) 
-            return 0;
-
-        for (i = count - 1; i >= 0 && matched < target_count; i--) {
-            if (buf[i] == target[target_count - matched - 1]) 
-                matched++;
-            else
-                matched = 0;
-        }
-        if (matched >= target_count) {
-            return lseek(tf->fd, start + i + 1, SEEK_SET);
-        }
-    } while (start >= 0);
-    return -1;
-}
 
 static void apply_rate_limit(struct StreamBMH *bmh_context,
                              struct StreamBMH_Occ *bmh_occ,
@@ -140,7 +105,7 @@ static void apply_rate_limit(struct StreamBMH *bmh_context,
            2. Search for the delimiter, find it at position 12.
            3. Keep query1. Advance `dest` to position 12; `next` to position 12.
            4. Search for next delimiter, find it at position 25.
-           5. Move query3 to position 26 which skips query2
+           5. Move query3 to position 12 which skips query2
 
            Result:
            +-------------------+
@@ -197,7 +162,7 @@ static struct tailed_file * open_tailed_file(const char *filename) {
     tf->fd = open(tf->name, O_RDONLY);
     if (tf->fd < 0) goto bail;
 
-    tf->state = TAILED_FILE_STATE_DUMP;
+    tf->state = TAILED_FILE_STATE_START;
 
     tf->bmh_context = malloc(SBMH_SIZE(QUERY_DELIM_LEN));
     if (!tf->bmh_context) goto bail;
@@ -277,7 +242,7 @@ static ssize_t tailed_file_content_reader (void *cls, uint64_t pos, char *buf, s
             return MHD_CONTENT_READER_END_WITH_ERROR;
         }
 
-        if (tf->rate_limit > 1) {
+        if (tf->rate_limit_counter < 0 || tf->rate_limit > 1) {
             apply_rate_limit(
                 tf->bmh_context,
                 &tf->bmh_occ,
@@ -287,6 +252,22 @@ static ssize_t tailed_file_content_reader (void *cls, uint64_t pos, char *buf, s
                 &tf->rate_limit_counter);
         }
         return n;
+    }
+
+    if (TAILED_FILE_STATE_START == tf->state) {
+        /* apply_rate_limit() will neglect to emit QUERY_DELIM on the first
+           query after a client connects. So we force emitting the delimiter here. */
+
+        if (QUERY_DELIM_LEN >= max)
+            return MHD_CONTENT_READER_END_WITH_ERROR;
+
+        memmove(buf, QUERY_DELIM, QUERY_DELIM_LEN);
+        tf->state = TAILED_FILE_STATE_DUMP;
+
+        /* skip the first, potentially partial, query */
+        tf->rate_limit_counter = -1;
+
+        return QUERY_DELIM_LEN;
     }
 
     return 0;
@@ -313,8 +294,9 @@ static int send_slow_log (struct MHD_Connection *connection, const char *filenam
     tf->rate_limit = rate_limit;
 
     if (tf) {
-        /* seek to the end; back up to the last full query  */
-        seek_last_query(tf);
+        /* seek to the end of the file */
+        if (lseek(tf->fd, tf->st.st_size, SEEK_SET) < 0)
+            return MHD_NO;
 
         response = MHD_create_response_from_callback(
             -1,                          /* -1 means unknown total size */
