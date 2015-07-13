@@ -54,9 +54,10 @@
 #define FULL_USAGE USAGE \
     "  -h, --help        display this help and exit\n" \
     "  -x, --no-daemon   do not daemonize\n" \
-    "  -f, --slowlog     path to MySQL slow log\n"
+    "  -f, --slowlog     path to MySQL slow log\n" \
+    "  -p, --port        port to use\n"
 
-#define PORT 3307
+#define DEFAULT_PORT 3307
 const char *QUERY_DELIM = "# User@Host: ";
 const int QUERY_DELIM_LEN = 13;
 
@@ -442,13 +443,15 @@ int main (int argc, char **argv)
     char *filename = NULL;
     struct MHD_Daemon *d;
     int opt_daemon = 1;
+    unsigned short port = DEFAULT_PORT;
 
     int c;
-    static const char shortopts[] = "h?xf:";
+    static const char shortopts[] = "h?xf:p:";
     static struct option longopts[] = {
         { "help",      no_argument,       NULL, 'h' },
         { "no-daemon", no_argument,       NULL, 'x' },
         { "slowlog",   required_argument, NULL, 'f' },
+        { "port",      required_argument, NULL, 'p' },
         { NULL,        0,                 NULL, 0   }
     };
 
@@ -464,6 +467,18 @@ int main (int argc, char **argv)
             break;
         case 'f':
             filename = optarg;
+            break;
+        case 'p':
+            if (sscanf(optarg, "%hu", &port)) {
+                printf("listening on port %d\n", port);
+            } else {
+                fprintf(stderr, "invalid port %s\n", optarg);
+                exit(1);
+            }
+            if (port < 1 || port > 65535) {
+                fprintf(stderr, "port number needs to fall between 1 and 65535\n");
+                exit(1);
+            }
             break;
         default:
             fprintf(stderr, USAGE);
@@ -487,7 +502,7 @@ int main (int argc, char **argv)
     }
 
     d = MHD_start_daemon(MHD_USE_THREAD_PER_CONNECTION,
-                         PORT,
+                         port,
                          NULL,
                          NULL,
                          &handle_request,
