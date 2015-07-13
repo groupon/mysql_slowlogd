@@ -152,7 +152,7 @@ static struct tailed_file * open_tailed_file(const char *filename) {
 
     tf = malloc(sizeof(struct tailed_file));
     if (!tf) goto bail;
-    memset(tf, 0, sizeof(tf));
+    memset(tf, 0, sizeof(*tf));
 
     tf->name = strdup(filename);
     if (!tf->name) goto bail;
